@@ -9,8 +9,8 @@ describe "IntervalTree::Node" do
     end
   end
 
-  describe '#search' do
-    subject(:result) { node.search(-5...3) }
+  describe '#intersects' do
+    subject(:result) { node.intersects(-5...3) }
 
     let(:node) do
       IntervalTree::Tree.new(
@@ -29,8 +29,8 @@ describe "IntervalTree::Node" do
     end
 
     before do
-      allow(node.left_node).to receive(:search).and_call_original
-      allow(node.right_node).to receive(:search).and_call_original
+      allow(node.left_node).to receive(:intersects).and_call_original
+      allow(node.right_node).to receive(:intersects).and_call_original
       result
     end
 
@@ -46,11 +46,11 @@ describe "IntervalTree::Node" do
 
     context 'only searches the necessary nodes' do
       it 'searches the left node' do
-        expect(node.left_node).to have_received(:search)
+        expect(node.left_node).to have_received(:intersects)
       end
 
       it "does not search the right node, since the top node's center (12) is greater than the search's end (3)" do
-        expect(node.right_node).not_to have_received(:search)
+        expect(node.right_node).not_to have_received(:intersects)
       end
     end
   end
@@ -112,7 +112,7 @@ describe "IntervalTree::Tree" do
         it 'constructs a range with a value' do
           itvs = [(1..5)]
           tree = IntervalTree::Tree.new(itvs) { |l, r| ValueRange.new(l, r, 15) }
-          result = tree.search(2).first
+          result = tree.intersects(2).first
           expect(result).to be_kind_of ValueRange
           expect(result.value).to be == 15
         end

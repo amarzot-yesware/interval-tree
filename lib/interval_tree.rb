@@ -32,19 +32,31 @@ module IntervalTree
     end
 
     # Search by range or point
-    DEFAULT_OPTIONS = {unique: true}
+    DEFAULT_OPTIONS = {unique: true, search_method: :intersects}
     def search(query, options = {})
       options = DEFAULT_OPTIONS.merge(options)
 
       return nil unless @top_node
 
       if query.respond_to?(:begin)
-        result = top_node.search(query)
+        result = top_node.public_send( options[:search_method], query)
         options[:unique] ? result.uniq : result
       else
         point_search(self.top_node, query, [], options[:unique])
       end
         .sort_by{|x|[x.begin, x.end]}
+    end
+
+    def intersects(query)
+      search(query, search_method: :intersects)
+    end
+
+    def covers(query)
+      search(query, search_method: :covers)
+    end
+
+    def covered_by(query)
+      search(query, search_method: :covered_by)
     end
 
     def ==(other)
@@ -110,33 +122,47 @@ module IntervalTree
     end
 
     # Search by range only
-    def search(query)
-      search_s_center(query) +
-        (left_node && query.begin.to_r < x_center && left_node.search(query) || []) +
-        (right_node && query.end.to_r > x_center && right_node.search(query) || [])
+    def intersects(query)
+      intersects_search_s_center(query) +
+        (left_node && query.begin.to_r < x_center && left_node.intersects(query) || []) +
+        (right_node && query.end.to_r > x_center && right_node.intersects(query) || [])
+    end
+
+    # Search for intervals which cover the query
+    def covers(query)
+      covers_search_s_center(query) +
+        (left_node && query.begin.to_r < x_center && left_node.covers(query) || []) +
+        (right_node && query.end.to_r > x_center && right_node.covers(query) || [])
+    end
+
+    # Search for intervals which are covered by the query
+    def covered_by(query)
+      covered_by_search_s_center(query) +
+        (left_node && query.begin.to_r < x_center && left_node.covered_by(query) || []) +
+        (right_node && query.end.to_r > x_center && right_node.covered_by(query) || [])
     end
 
     private
 
-    def search_s_center(query)
+    def intersects_search_s_center(query)
       s_center.select do |k|
-        (
-          # k is entirely contained within the query
-          (k.begin >= query.begin) &&
+        query.begin < k.end && query.end > k.begin
+      end
+    end
+
+    def covers_search_s_center(query)
+      s_center.select do |k|
+          # k than the query
+          (k.begin <= query.begin) &&
+            (k.end >= query.end)
+      end
+    end
+
+    def covered_by_search_s_center(query)
+      s_center.select do |k|
+        # k is entirely contained within the query
+        (k.begin >= query.begin) &&
           (k.end <= query.end)
-        ) || (
-          # k's start overlaps with the query
-          (k.begin >= query.begin) &&
-          (k.begin < query.end)
-        ) || (
-          # k's end overlaps with the query
-          (k.end > query.begin) &&
-          (k.end <= query.end)
-        ) || (
-          # k is bigger than the query
-          (k.begin < query.begin) &&
-          (k.end > query.end)
-        )
       end
     end
   end # class Node
