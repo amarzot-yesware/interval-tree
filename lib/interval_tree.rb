@@ -6,11 +6,11 @@ module IntervalTree
     def initialize(ranges, &range_factory)
       range_factory = lambda { |l, r| (l ... r+1) } unless block_given?
       ranges_excl = ensure_exclusive_end([ranges].flatten, range_factory)
-      @top_node = divide_intervals(ranges_excl)
+      @top_node = construct_tree(ranges_excl)
     end
     attr_reader :top_node
 
-    def divide_intervals(intervals)
+    def construct_tree(intervals)
       return nil if intervals.empty?
       x_center = center(intervals)
       s_center = Array.new
@@ -28,7 +28,7 @@ module IntervalTree
         end
       end
       Node.new(x_center, s_center,
-               divide_intervals(s_left), divide_intervals(s_right))
+               construct_tree(s_left), construct_tree(s_right))
     end
 
     # Search by range or point
@@ -96,49 +96,48 @@ module IntervalTree
   class Node
     def initialize(x_center, s_center, left_node, right_node)
       @x_center = x_center
-      @s_center = s_center
+      @begin_sorted = s_center.sort_by {|i| i.begin}
+      @end_rsorted = s_center.sort_by {|i| i.end}.reverse
       @left_node = left_node
       @right_node = right_node
     end
-    attr_reader :x_center, :s_center, :left_node, :right_node
+    attr_reader :x_center, :begin_sorted, :end_rsorted, :left_node, :right_node
+    alias :s_center :begin_sorted
 
     def ==(other)
       x_center == other.x_center &&
-      s_center == other.s_center &&
+      begin_sorted == other.begin_sorted &&
+      end_rsorted == other.end_rsorted &&
       left_node == other.left_node &&
       right_node == other.right_node
     end
 
     # Search by range only
     def search(query)
-      search_s_center(query) +
+      search_node_bsearch(query) +
         (left_node && query.begin.to_r < x_center && left_node.search(query) || []) +
         (right_node && query.end.to_r > x_center && right_node.search(query) || [])
     end
 
     private
 
-    def search_s_center(query)
-      s_center.select do |k|
-        (
-          # k is entirely contained within the query
-          (k.begin >= query.begin) &&
-          (k.end <= query.end)
-        ) || (
-          # k's start overlaps with the query
-          (k.begin >= query.begin) &&
-          (k.begin < query.end)
-        ) || (
-          # k's end overlaps with the query
-          (k.end > query.begin) &&
-          (k.end <= query.end)
-        ) || (
-          # k is bigger than the query
-          (k.begin < query.begin) &&
-          (k.end > query.end)
-        )
+    def search_node_bsearch(query)
+      if query.end.to_r < x_center
+        # Query interval is entirely left of center
+        index = begin_sorted.bsearch_index {|i| i.begin >= query.end}
+        return begin_sorted unless index
+        begin_sorted.take index
+      elsif query.begin.to_r >= x_center
+        # Query interval is entirely right of center
+        index = end_rsorted.bsearch_index {|i| i.end <= query.begin}
+        return end_rsorted unless index
+        end_rsorted.take index
+      else
+        # Query interval contains center, thus intersects all
+        begin_sorted
       end
     end
+
   end # class Node
 
 end # module IntervalTree
